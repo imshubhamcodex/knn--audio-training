@@ -34,11 +34,19 @@ def extract_llf(spectrogram):
     features = []
     for frame in tqdm(spectrogram.T, desc="Extracting features", leave=False):
         abs_frame = np.abs(frame) + 1e-8
+        norm_frame = abs_frame / np.sum(abs_frame)
+
         energy = np.sum(abs_frame ** 2)
         centroid = np.sum(np.arange(len(abs_frame)) * abs_frame) / np.sum(abs_frame)
+        spread = np.sqrt(np.sum(((np.arange(len(abs_frame)) - centroid) ** 2) * abs_frame) / np.sum(abs_frame))
         rolloff = np.argmax(np.cumsum(abs_frame) >= 0.85 * np.sum(abs_frame))
         zero_crossings = np.count_nonzero(np.diff(np.sign(frame)))
-        features.append([energy, centroid, rolloff, zero_crossings])
+        flatness = np.exp(np.mean(np.log(abs_frame))) / np.mean(abs_frame)
+        entropy = -np.sum(norm_frame * np.log2(norm_frame))
+        skewness = (np.sum(((np.arange(len(abs_frame)) - centroid) ** 3) * abs_frame) / np.sum(abs_frame)) / (spread ** 3)
+        slope = np.polyfit(np.arange(len(abs_frame)), abs_frame, 1)[0]
+
+        features.append([energy, centroid, spread, rolloff, zero_crossings, flatness, entropy, skewness, slope])
     return np.array(features).flatten()
 
 # ---------- Split Long Audio into Clips ----------
@@ -79,10 +87,11 @@ if __name__ == '__main__':
     raw_audio_dir = 'raw_audio'
     data_directory = 'dataset_clips'
     audio_files = {
-        'chainsaw': 'chainsaw_long.wav',
-        'vehicle': 'vehicle_long.wav',
-        'speech': 'speech_long.wav',
-        'forest': 'forest_long.wav'
+        'chainsaw': 'chainsaw_long.mp3',
+        'handsaw' : 'handsaw_long.mp3',
+        'vehicle': 'vehicle_long.mp3',
+        'speech': 'speech_long.mp3',
+        'forest': 'forest_long.mp3'
     }
 
     # Create clips if needed
@@ -115,7 +124,7 @@ if __name__ == '__main__':
     for _ in tqdm(range(1), desc="Training"):
         knn = KNeighborsClassifier(n_neighbors=5, metric='manhattan')
         knn.fit(X_train, y_train)
-
+    
     # Evaluate
     y_pred = knn.predict(X_test)
     print("\nClassification Report:")
