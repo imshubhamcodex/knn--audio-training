@@ -2,6 +2,7 @@ import os
 import numpy as np
 import librosa
 import soundfile as sf
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -81,6 +82,45 @@ def load_clips_from_folder(data_dir):
             y.append(label)
     return np.array(X), np.array(y)
 
+
+# ---------- Spectrogram plot from Folders ----------
+def plot_sht_spectrogram(signal, sr, label, frame_size=512, hop_size=256):
+    spectrogram = compute_stht(signal, frame_size=frame_size, hop_size=hop_size)
+    log_spec = np.log1p(np.abs(spectrogram))  # Log scaling
+
+    num_frames = log_spec.shape[1]
+    duration = len(signal) / sr
+    time_axis = np.arange(num_frames) * hop_size / sr  # time in seconds
+
+    plt.imshow(log_spec, aspect='auto', origin='lower', cmap='viridis',
+               extent=[time_axis[0], time_axis[-1], 0, frame_size])
+    plt.title(f'STHT Spectrogram - {label}')
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Frequency Bin')
+
+
+def visualize_all_classes(data_dir):
+    classes = sorted(os.listdir(data_dir))
+    num_classes = len(classes)
+
+    plt.figure(figsize=(4 * num_classes, 5))  # Wider, shorter
+
+    for i, label in enumerate(classes):
+        class_path = os.path.join(data_dir, label)
+        files = [f for f in os.listdir(class_path) if f.endswith('.wav')]
+        if not files:
+            continue
+        file_path = os.path.join(class_path, files[0])
+        signal, sr = librosa.load(file_path, sr=16000)
+
+        plt.subplot(1, num_classes, i + 1)
+        plot_sht_spectrogram(signal, sr, label)
+
+    plt.tight_layout()
+    plt.show()
+
+
+
 # ---------- Main Execution ----------
 if __name__ == '__main__':
     # Paths
@@ -129,3 +169,5 @@ if __name__ == '__main__':
     y_pred = knn.predict(X_test)
     print("\nClassification Report:")
     print(classification_report(label_encoder.inverse_transform(y_test), label_encoder.inverse_transform(y_pred)))
+
+    visualize_all_classes(data_directory)
