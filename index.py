@@ -1,5 +1,7 @@
 import os
 import numpy as np
+import pandas as pd
+from collections import Counter
 import librosa
 import soundfile as sf
 import matplotlib.pyplot as plt
@@ -121,6 +123,34 @@ def visualize_all_classes(data_dir):
 
 
 
+
+def predict_new_audio(audio_path, knn_model, scaler, label_encoder, clip_length=1.0, sr=16000):
+    # Load and split the audio into clips (if long)
+    signal, _ = librosa.load(audio_path, sr=sr)
+    clip_samples = int(clip_length * sr)
+    num_clips = len(signal) // clip_samples
+
+    predictions = []
+    for i in range(num_clips):
+        start = i * clip_samples
+        end = start + clip_samples
+        clip = signal[start:end]
+
+        # Extract features (same as training)
+        spectrogram = compute_stht(clip)
+        features = extract_llf(spectrogram)
+
+        # Scale features (using the same scaler from training)
+        features_scaled = scaler.transform([features])
+
+        # Predict
+        pred = knn_model.predict(features_scaled)
+        pred_label = label_encoder.inverse_transform(pred)[0]
+        predictions.append(pred_label)
+
+    return predictions
+
+
 # ---------- Main Execution ----------
 if __name__ == '__main__':
     # Paths
@@ -161,9 +191,8 @@ if __name__ == '__main__':
 
     # Train KNN classifier with a progress bar (mocked since KNN is fast)
     print("Training KNN classifier...")
-    for _ in tqdm(range(1), desc="Training"):
-        knn = KNeighborsClassifier(n_neighbors=5, metric='manhattan')
-        knn.fit(X_train, y_train)
+    knn = KNeighborsClassifier(n_neighbors=5, metric='manhattan')
+    knn.fit(X_train, y_train)
     
     # Evaluate
     y_pred = knn.predict(X_test)
@@ -171,3 +200,31 @@ if __name__ == '__main__':
     print(classification_report(label_encoder.inverse_transform(y_test), label_encoder.inverse_transform(y_pred)))
 
     visualize_all_classes(data_directory)
+
+
+
+    # Test a new audio file
+    new_audio_path = './test.mp3'  # Replace with your file
+    print(f"\nTesting new audio: {new_audio_path}")
+    predictions = predict_new_audio(new_audio_path, knn, scaler, label_encoder)
+
+    # Convert to a DataFrame for tabular display
+    df = pd.DataFrame({
+        "Clip Number": range(1, len(predictions)+1),
+        "Predicted Label": predictions
+    })
+
+    # Calculate majority vote
+    majority_vote = Counter(predictions).most_common(1)[0][0]
+    counts = Counter(predictions)
+
+    # Print results
+    print("=== Predictions for Each Clip ===")
+    print(df.to_string(index=False))
+
+    print("\n=== Summary Statistics ===")
+    print(f"Total clips analyzed: {len(predictions)}")
+    for label, count in counts.items():
+        print(f"{label}: {count} clips ({count/len(predictions)*100:.1f}%)")
+
+    print(f"\nMajority vote (final prediction): {majority_vote}")
